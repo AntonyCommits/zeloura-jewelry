@@ -1,10 +1,18 @@
-// Firebase initialization for client-side usage
+// Firebase initialization for client-side usage only
 // Fill the environment variables in .env.local
 
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
+
+// Check if we're in a browser environment and have required env vars
+const isClient = typeof window !== 'undefined';
+const hasRequiredEnvVars = Boolean(
+  process.env.NEXT_PUBLIC_FIREBASE_API_KEY &&
+  process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN &&
+  process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID
+);
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY as string,
@@ -16,10 +24,27 @@ const firebaseConfig = {
   measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID as string | undefined,
 };
 
-// Avoid re-initializing in Fast Refresh / multiple imports
-const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+// Initialize Firebase only on client side with valid config
+let app: any = null;
+let auth: any = null;
+let db: any = null;
+let storage: any = null;
 
-export const auth = getAuth(app);
-export const db = getFirestore(app);
-export const storage = getStorage(app);
+if (isClient && hasRequiredEnvVars) {
+  try {
+    // Avoid re-initializing in Fast Refresh / multiple imports
+    app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+    auth = getAuth(app);
+    db = getFirestore(app);
+    storage = getStorage(app);
+  } catch (error) {
+    console.error('Firebase initialization failed:', error);
+  }
+} else if (!isClient) {
+  // Server-side: provide mock objects to prevent build errors
+  console.warn('Firebase not initialized on server side');
+}
+
+// Export Firebase services (will be null if not initialized)
+export { auth, db, storage };
 export default app;

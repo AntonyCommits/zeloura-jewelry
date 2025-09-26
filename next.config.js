@@ -27,6 +27,25 @@ const nextConfig = {
   experimental: {
     // Add any experimental features here if needed
   },
+
+  // Webpack configuration to handle module issues
+  webpack: (config, { isServer }) => {
+    // Fix for module detection issues
+    if (!isServer) {
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        fs: false,
+      };
+    }
+
+    // Ensure proper module handling
+    config.experiments = {
+      ...config.experiments,
+      topLevelAwait: true,
+    };
+
+    return config;
+  },
 };
 
 module.exports = nextConfig;

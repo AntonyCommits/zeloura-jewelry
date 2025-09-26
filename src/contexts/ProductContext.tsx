@@ -34,6 +34,26 @@ interface ProductContextType {
 const ProductContext = createContext<ProductContextType | undefined>(undefined);
 
 export function ProductProvider({ children }: { children: ReactNode }) {
+  // Check if Firebase is properly initialized
+  if (!db) {
+    console.warn('Firebase not available - ProductContext will not function properly');
+    return (
+      <ProductContext.Provider value={{
+        products: [],
+        addProduct: async () => '',
+        updateProduct: async () => false,
+        deleteProduct: async () => false,
+        getProductById: () => undefined,
+        getProductsByCategory: () => [],
+        searchProducts: () => [],
+        isLoading: false,
+        error: 'Firebase not available',
+      }}>
+        {children}
+      </ProductContext.Provider>
+    );
+  }
+
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

@@ -62,6 +62,27 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 const userDocRef = (uid: string) => doc(db, 'users', uid);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  // Check if Firebase is properly initialized
+  if (!auth || !db) {
+    console.warn('Firebase not available - AuthContext will not function properly');
+    return (
+      <AuthContext.Provider value={{
+        user: null,
+        isLoading: false,
+        isAuthenticated: false,
+        login: async () => false,
+        signup: async () => false,
+        logout: () => {},
+        updateProfile: async () => false,
+        addToWishlist: () => {},
+        removeFromWishlist: () => {},
+        isInWishlist: () => false,
+      }}>
+        {children}
+      </AuthContext.Provider>
+    );
+  }
+
   const [state, setState] = useState<AuthState>({
     user: null,
     isLoading: true,
