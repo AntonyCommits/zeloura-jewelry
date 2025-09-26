@@ -59,7 +59,7 @@ export default function LiveChatWidget() {
       };
       setMessages([welcomeMessage]);
     }
-  }, [isOpen]);
+  }, [isOpen, messages.length, botResponses.greeting]);
 
   useEffect(() => {
     scrollToBottom();

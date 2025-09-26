@@ -107,7 +107,13 @@ export default function Header() {
     }
   ];
 
-  const handleMenuClick = (item: any) => {
+  interface MenuItem {
+    link?: string;
+    items?: Array<{ name: string; link: string }>;
+    title?: string;
+  }
+
+  const handleMenuClick = (item: MenuItem) => {
     if (item.link) {
       router.push(item.link);
     } else if (item.items) {

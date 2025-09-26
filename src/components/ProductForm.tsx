@@ -60,38 +60,45 @@ export default function ProductForm({ product, onClose }: ProductFormProps) {
   };
 
   useEffect(() => {
-    if (product) {
-      setFormData({
-        name: product.name,
-        description: product.description,
-        category: product.category,
-        subcategory: product.subcategory,
-        brand: product.brand,
-        variants: product.variants.map(v => ({
-          color: v.color,
-          material: v.material,
-          price: v.price,
-          originalPrice: v.originalPrice,
-          stock: v.stock,
-          images: v.images
-        })),
-        features: [...product.features],
-        specifications: { ...product.specifications },
-        care: [...product.care],
-        shipping: { ...product.shipping },
-        returns: { ...product.returns },
-        tags: [...product.tags],
-        isNew: product.isNew || false,
-        isBestseller: product.isBestseller || false,
-        discount: product.discount || 0
-      });
-    }
-  }, [product]);
+    if (!product) return;
 
-  const validateForm = () => {
-    const newErrors: Record<string, string> = {};
+    setFormData({
+      name: product.name,
+      description: product.description,
+      category: product.category,
+      subcategory: product.subcategory,
+      brand: product.brand,
+      variants: product.variants.map(({ color, material, price, originalPrice, stock, images }) => ({
+        color,
+        material,
+        price,
+        originalPrice,
+        stock,
+        images: [...images]
+      })),
+      features: [...product.features],
+      specifications: { ...product.specifications },
+      care: [...product.care],
+      shipping: { 
+        free: product.shipping?.free ?? true,
+        days: product.shipping?.days ?? 3,
+        cost: product.shipping?.cost ?? 0 
+      },
+      returns: { 
+        allowed: product.returns?.allowed ?? true,
+        days: product.returns?.days ?? 30 
+      },
+      tags: [...product.tags],
+      isNew: product.isNew ?? false,
+      isBestseller: product.isBestseller ?? false,
+      discount: product.discount ?? 0
+    });
+  }, [product]); // Include product in dependencies
 
-    if (!formData.name.trim()) newErrors.name = 'Product name is required';
+    const validateForm = () => {
+      const newErrors: Record<string, string> = {};
+
+      if (!formData.name.trim()) newErrors.name = 'Product name is required';
     if (!formData.description.trim()) newErrors.description = 'Description is required';
     if (!formData.category) newErrors.category = 'Category is required';
     if (!formData.subcategory) newErrors.subcategory = 'Subcategory is required';
@@ -110,16 +117,13 @@ export default function ProductForm({ product, onClose }: ProductFormProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!validateForm()) return;
     
-    if (!validateForm()) {
-      return;
-    }
-
     setIsSubmitting(true);
     setErrors({});
-
+    
     try {
-      const productData = {
+      const productData: Omit<Product, 'id' | 'createdAt' | 'updatedAt'> = {
         ...formData,
         variants: formData.variants.map((variant, index) => ({
           ...variant,
@@ -131,7 +135,7 @@ export default function ProductForm({ product, onClose }: ProductFormProps) {
       };
 
       if (product) {
-        const success = updateProduct(product.id, productData);
+        const success = await updateProduct(product.id, productData);
         if (success) {
           alert('Product updated successfully!');
           onClose();
@@ -176,7 +180,11 @@ export default function ProductForm({ product, onClose }: ProductFormProps) {
     }));
   };
 
-  const updateVariant = (index: number, field: keyof Omit<ProductVariant, 'id'>, value: any) => {
+  const updateVariant = (
+    index: number, 
+    field: keyof Omit<ProductVariant, 'id'>, 
+    value: string | number | boolean | Array<{ url: string; alt: string; type: string }>
+  ) => {
     setFormData(prev => ({
       ...prev,
       variants: prev.variants.map((variant, i) => 

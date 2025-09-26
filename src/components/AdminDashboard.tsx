@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   Star,
   Eye,
@@ -31,7 +31,8 @@ import {
   getReviewsForModeration,
   getReviewsStats,
   moderateReview,
-  addAdminReply
+  addAdminReply,
+  getReviewsForProduct
 } from '@/data/reviews';
 import { getProductById } from '@/data/products';
 import ProductManagement from './ProductManagement';
@@ -41,8 +42,18 @@ interface AdminDashboardProps {
 }
 
 export default function AdminDashboard({ className = '' }: AdminDashboardProps) {
-  const { admin, hasPermission, logout } = useAdmin();
+  const { admin, hasPermission, logout, isAuthenticated } = useAdmin();
   const { user } = useAuth();
+  
+  // Debug logging
+  useEffect(() => {
+    console.log('AdminDashboard mounted with admin state:', { 
+      admin, 
+      isAuthenticated,
+      permissions: admin?.permissions,
+      hasModeratePermission: hasPermission?.('reviews', 'moderate')
+    });
+  }, [admin, isAuthenticated, hasPermission]);
   const [activeTab, setActiveTab] = useState<'overview' | 'pending' | 'flagged' | 'all' | 'products'>('overview');
   const [reviews, setReviews] = useState<Review[]>([]);
   const [selectedReview, setSelectedReview] = useState<Review | null>(null);
@@ -51,65 +62,127 @@ export default function AdminDashboard({ className = '' }: AdminDashboardProps) 
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'approved' | 'flagged' | 'rejected'>('all');
 
+  const handleReply = async () => {
+    if (!selectedReview?.id || !admin?.id || !replyText.trim()) {
+      console.error('Missing required data for reply');
+      return;
+    }
+
+    try {
+      const reply = await addAdminReply(
+        selectedReview.id,
+        admin.id,
+        admin.name,
+        admin.role,
+        replyText.trim()
+      );
+
+      if (reply) {
+        // Update the selected review with the new reply
+        const updatedReview = {
+          ...selectedReview,
+          adminReplies: [...(selectedReview.adminReplies || []), reply]
+        };
+        
+        // Update the reviews list
+        setReviews(reviews.map(r => 
+          r.id === selectedReview.id ? updatedReview : r
+        ));
+        
+        // Update the selected review
+        setSelectedReview(updatedReview);
+        
+        // Clear the reply text
+        setReplyText('');
+        
+        alert('Reply sent successfully!');
+      } else {
+        throw new Error('Failed to send reply');
+      }
+    } catch (error) {
+      console.error('Error sending reply:', error);
+      alert('Failed to send reply. Please try again.');
+    }
+  };
+
   const stats = getReviewsStats();
+
+  const loadReviews = useCallback(() => {
+    try {
+      let reviewsData: Review[] = [];
+
+      switch (activeTab) {
+        case 'pending':
+          reviewsData = getReviewsForModeration('pending');
+          break;
+        case 'flagged':
+          reviewsData = getReviewsForModeration('flagged');
+          break;
+        case 'all':
+          // Get all reviews and filter for non-approved ones
+          reviewsData = getReviewsForModeration().filter(
+            review => review.status !== 'approved'
+          );
+          break;
+        case 'products':
+          return; // Don't load reviews for products tab
+        default:
+          // For overview, get recent reviews (first 10)
+          reviewsData = getReviewsForModeration().slice(0, 10);
+      }
+
+      // Apply additional status filter if needed
+      if (filterStatus !== 'all') {
+        reviewsData = reviewsData.filter(review => review.status === filterStatus);
+      }
+
+      setReviews(reviewsData);
+    } catch (error) {
+      console.error('Error loading reviews:', error);
+      // Handle error appropriately, e.g., show error message to user
+      setReviews([]);
+    }
+  }, [activeTab, filterStatus]);
 
   useEffect(() => {
     loadReviews();
-  }, [activeTab, filterStatus]);
-
-  const loadReviews = () => {
-    let reviewsData: Review[] = [];
-
-    switch (activeTab) {
-      case 'pending':
-        reviewsData = getReviewsForModeration('pending');
-        break;
-      case 'flagged':
-        reviewsData = getReviewsForModeration('flagged');
-        break;
-      case 'all':
-        reviewsData = getReviewsForModeration(); // All non-approved
-        break;
-      case 'products':
-        return; // Don't load reviews for products tab
-      default:
-        reviewsData = getReviewsForModeration().slice(0, 10); // Recent for overview
-    }
-
-    if (filterStatus !== 'all') {
-      reviewsData = reviewsData.filter(r => r.status === filterStatus);
-    }
-
-    if (searchTerm) {
-      reviewsData = reviewsData.filter(r =>
-        r.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        r.comment.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        r.userName.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-    }
-
-    setReviews(reviewsData);
-  };
+  }, [loadReviews]);
 
   const handleModeration = async (reviewId: string, action: 'approve' | 'reject' | 'flag') => {
-    if (!admin || !hasPermission('reviews', 'moderate')) return;
+    if (!admin?.id) {
+      console.error('Unauthorized: Admin not logged in');
+      console.log('Admin state:', { admin });
+      return;
+    }
+    
+    if (!hasPermission('reviews', 'moderate')) {
+      console.error('Unauthorized: Missing required permissions');
+      console.log('Admin permissions:', admin.permissions);
+      console.log('Has permission (reviews, moderate):', hasPermission('reviews', 'moderate'));
+      return;
+    }
 
     try {
-      const success = await moderateReview(reviewId, action, admin.id, moderationNote);
+      const success = await moderateReview(reviewId, action, admin.id, moderationNote || undefined);
       if (success) {
         await loadReviews();
-        setSelectedReview(null);
-        setModerationNote('');
+        setSelectedReview?.(null);
+        setModerationNote?.('');
         alert(`Review ${action}ed successfully!`);
+      } else {
+        alert('Failed to moderate review. Please try again.');
       }
     } catch (error) {
-      console.error('Error moderating review:', error);
-      alert('Failed to moderate review. Please try again.');
+      console.error('Error during moderation:', error);
+      alert('An error occurred while processing your request.');
     }
   };
 
-  const handleReply = async () => {
-    if (!admin || !selectedReview || !replyText.trim()) return;
+  const handleAdminReply = async () => {
+    if (!admin?.id || !selectedReview?.id || !replyText.trim()) {
+      console.error('Missing required data for admin reply');
+      return;
+    }
 
     try {
       const reply = await addAdminReply(
@@ -134,6 +207,14 @@ export default function AdminDashboard({ className = '' }: AdminDashboardProps) 
       console.error('Error adding reply:', error);
       alert('Failed to add reply. Please try again.');
     }
+  };
+
+  const handleAction = (action: 'approve' | 'reject' | 'flag', data: { id: string }) => {
+    if (!data?.id) {
+      console.error('Invalid review data');
+      return;
+    }
+    void handleModeration(data.id, action);
   };
 
   const getStatusColor = (status: string) => {

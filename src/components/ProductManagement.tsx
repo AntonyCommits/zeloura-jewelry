@@ -34,7 +34,7 @@ interface ProductManagementProps {
   className?: string;
 }
 
-export default function ProductManagement({ className = '' }: ProductManagementProps) {
+export default function ProductManagement({ className = '' }: ProductManagementProps): JSX.Element {
   const { admin, hasPermission } = useAdmin();
   const { user } = useAuth();
   const { products, deleteProduct, searchProducts, isLoading } = useProducts();
@@ -80,21 +80,42 @@ export default function ProductManagement({ className = '' }: ProductManagementP
     setFilteredProducts(filtered);
   }, [products, searchTerm, filterCategory, activeTab, searchProducts]);
 
+  type SortDirection = 'asc' | 'desc';
+
+  const handleSort = (key: keyof Product, direction: SortDirection) => {
+    const sortedProducts = [...products].sort((a, b) => {
+      const aValue = a[key];
+      const bValue = b[key];
+      
+      if (aValue === undefined || bValue === undefined) return 0;
+      if (aValue < bValue) return direction === 'asc' ? -1 : 1;
+      if (aValue > bValue) return direction === 'asc' ? 1 : -1;
+      return 0;
+    });
+    
+    setFilteredProducts(sortedProducts);
+  };
+
   const handleDeleteProduct = (product: Product) => {
     setProductToDelete(product);
     setShowDeleteDialog(true);
   };
 
-  const confirmDelete = () => {
-    if (productToDelete) {
-      const success = deleteProduct(productToDelete.id);
+  const confirmDelete = async () => {
+    if (!productToDelete) return;
+
+    try {
+      const success = await deleteProduct(productToDelete.id);
       if (success) {
         setShowDeleteDialog(false);
         setProductToDelete(null);
         alert('Product deleted successfully!');
       } else {
-        alert('Failed to delete product');
+        alert('Failed to delete product. Please try again.');
       }
+    } catch (error) {
+      console.error('Error deleting product:', error);
+      alert('An error occurred while deleting the product.');
     }
   };
 
